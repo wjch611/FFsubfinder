@@ -4,13 +4,14 @@ import random
 import json
 from pathlib import Path
 from collections import Counter
+import re
 
 # 配置路径
 SUBFINDER_PATH = r"E:\SecTools\passive_subdomain\subfinder_2.7.0_windows_amd64\subfinder.exe"
 HTTPX_PATH = r"E:\SecTools\httpx_1.6.10_windows_amd64\go_httpx.exe"
 FFUF_PATH = r"E:\SecTools\ffuf\ffuf.exe"
 UA_LIST_PATH = r"E:\SecTools\dict\ua.txt"
-SUBNAME_DICT_PATH = r"E:\SecTools\dict\domain_dict\subnames_next.txt"
+SUBNAME_DICT_PATH = r"E:\SecTools\dict\domain_dict\subnames.txt"
 OUTPUT_DIR = r"E:\SecTools\ffsubfinder"
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -51,6 +52,15 @@ def extract_urls_from_ffuf_json(ffuf_file, domain, max_common_size_count=5):
         print(e)
         return []
 
+def clean_httpx_urls(urls):
+    clean_urls = set()
+    for url in urls:
+        # 匹配并提取跳转后的真实域名
+        match = re.match(r"https?://(?:www\.)?([a-zA-Z0-9.-]+)", url)
+        if match:
+            clean_urls.add(match.group(1))
+    return clean_urls
+
 def main(domains_file):
     ua_list = load_user_agents(UA_LIST_PATH)
 
@@ -66,16 +76,12 @@ def main(domains_file):
         final_output_path = Path(OUTPUT_DIR) / f"{domain}.txt"
 
         # subfinder
-        run_command([
-            SUBFINDER_PATH, "-d", domain, "-o", str(subfinder_output), "-all"
-        ])
+        run_command([SUBFINDER_PATH, "-d", domain, "-o", str(subfinder_output), "-all"])
 
         # httpx
-        run_command([
-            HTTPX_PATH, "-l", str(subfinder_output), "-threads", "10", "-rate-limit", "30",
-            "-random-agent", "-timeout", "5", "-retries", "2", "-follow-redirects",
-            "-o", str(httpx_output)
-        ])
+        run_command([HTTPX_PATH, "-l", str(subfinder_output), "-threads", "10", "-rate-limit", "30",
+                     "-random-agent", "-timeout", "5", "-retries", "2", "-follow-redirects",
+                     "-o", str(httpx_output)])
 
         # ffuf
         random_ua = get_random_user_agent(ua_list)
@@ -103,7 +109,9 @@ def main(domains_file):
 
             ffuf_urls = set(extract_urls_from_ffuf_json(ffuf_output, domain))
 
-            all_urls = sorted(httpx_urls.union(ffuf_urls))
+            # 清理httpx中的URL：过滤跳转到www的URL并提取真实域名
+            cleaned_httpx_urls = clean_httpx_urls(httpx_urls)
+            all_urls = sorted(cleaned_httpx_urls.union(ffuf_urls))
 
             with open(final_output_path, 'w', encoding='utf-8') as f_out:
                 for url in all_urls:
