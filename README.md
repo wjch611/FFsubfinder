@@ -1,107 +1,139 @@
-## ffsubfinder
+1. # ffsubfinder - 子域名发现工具
 
-`ffsubfinder` 是一个集成 **被动子域名枚举**、**HTTP 存活探测** 以及 **FFUF 子域名猜解** 的 Python 自动化脚本。它能够批量处理域名列表，对每个域名执行子域名发现、存活验证、fuzz 发现，并最终合并去重有效子域名。
+   `ffsubfinder` 是一个结合被动和主动方式的子域名发现工具，基于 Subfinder、HTTPX 和 FFUF 实现。它通过被动枚举（Subfinder + HTTPX）和主动探测（FFUF）来发现目标域名的子域名，并对结果进行过滤以去除常见响应特征的无效子域名。
 
-------
+   ## 功能
 
-### 功能
+   - **被动子域名发现**：使用 Subfinder 收集子域名，并通过 HTTPX 验证其有效性。
+   - **主动子域名探测**：使用 FFUF 进行基于字典的子域名爆破。
+   - **结果过滤**：通过响应状态码、响应长度和词数过滤掉常见的无效子域名。
+   - **伪重定向过滤**：识别并过滤 HTTPX 返回状态码为 200 但实际发生重定向的子域名（需优化）。
+   - **随机 User-Agent**：支持从用户代理列表中随机选择 User-Agent，增强探测隐蔽性。
+   - **结果去重与整理**：合并被动和主动发现的子域名，输出整理后的结果。
 
-1. 调用 [subfinder](https://github.com/projectdiscovery/subfinder) 被动枚举子域名。
-2. 调用 [httpx](https://github.com/projectdiscovery/httpx) 对被动枚举结果做存活检测。
-3. 调用 [ffuf](https://github.com/ffuf/ffuf) 基于字典对子域名进行 fuzz，过滤掉高频默认响应大小。
-4. 合并 `httpx` 和 `ffuf` 输出，去重后输出最终子域名列表。
-5. 自动清理中间结果文件。
+   ## 依赖工具
 
-------
+   - **Subfinder**（v2.7.0）：用于被动子域名枚举。
+   - **HTTPX**（v1.6.10）：用于验证子域名的有效性并获取响应信息。
+   - **FFUF**：用于主动子域名爆破。
+   - **Python 3.8+**：运行脚本所需环境。
 
-### 前提条件
+   ## 安装
 
-- Windows 环境。
-- 安装有 Python 3.6+。
-- 已下载并配置好以下可执行文件，并确保脚本中对应路径正确：
-  - `subfinder.exe`
-  - `go_httpx.exe` 或 `httpx.exe`
-  - `ffuf.exe`
-- 已准备以下字典文件：
-  - `ua.txt`：User-Agent 列表。
-  - `subnames_next.txt`：子域名 fuzz 字典。
+   1. **安装依赖工具**：
 
-------
+      - 下载并安装 Subfinder、HTTPX 和 FFUF，确保它们在系统 PATH 中或配置正确路径。
+      - 示例路径：
+        - Subfinder: `E:\SecTools\passive_subdomain\subfinder_2.7.0_windows_amd64\subfinder.exe`
+        - HTTPX: `E:\SecTools\httpx_1.6.10_windows_amd64\go_httpx.exe`
+        - FFUF: `E:\SecTools\ffuf\ffuf.exe`
 
-### 安装与配置
+   2. **准备字典文件**：
 
-1. 克隆或下载本项目到本地：
+      - 用户代理列表：`E:\SecTools\dict\ua.txt`（每行一个 User-Agent）。
+      - 子域名字典：`E:\SecTools\dict\domain_dict\subnames_next.txt`（每行一个子域名前缀）。
 
-   ```powershell
-   git clone https://your-repo-url/ffsubfinder.git
-   cd ffsubfinder
-   ```
+   3. **安装 Python 依赖**：
 
-2. 安装必要的 Python 依赖（如果存在第三方库需求）：
+      ```bash
+      pip install -r requirements.txt
+      ```
 
-   ```powershell
-   pip install -r requirements.txt
-   ```
+      （如果需要，创建 `requirements.txt` 包含 `argparse` 等标准库无需额外安装）。
 
-3. 修改脚本顶部的路径配置，确保可执行文件和字典文件路径正确：
+   4. **配置输出目录**：
 
-   ```python
-   SUBFINDER_PATH = r"E:\SecTools\passive_subdomain\subfinder.exe"
-   HTTPX_PATH      = r"E:\SecTools\httpx_1.6.10_windows_amd64\go_httpx.exe"
-   FFUF_PATH       = r"E:\SecTools\ffuf\ffuf.exe"
-   UA_LIST_PATH    = r"E:\SecTools\dict\ua.txt"
-   SUBNAME_DICT_PATH = r"E:\SecTools\dict\domain_dict\subnames_next.txt"
-   OUTPUT_DIR      = r"E:\SecTools\ffsubfinder"
-   ```
+      - 默认输出目录：`E:\SecTools\ffsubfinder`。
+      - 确保目录存在或具有写权限。
 
-4. 确保 `OUTPUT_DIR` 指定的目录可写。
+   ## 使用方法
 
-------
+   1. **准备域名列表**：
+      创建一个 `domains.txt` 文件，每行一个目标域名，例如：
 
-### 使用方法
+      ```
+      example.com
+      test.com
+      ```
 
-1. 将要扫描的域名列表保存到 `domains.txt`，每行一个域名，例如：
+   2. **运行脚本**：
 
-   ```txt
-   example.com
-   testsite.org
-   ```
+      ```bash
+      python ffsubfinder.py -u domains.txt
+      ```
 
-2. 执行脚本：
+      - `-u` 或 `--urls`：指定包含目标域名的文件路径。
 
-   ```powershell
+   3. **输出结果**：
+
+      - 每个域名的最终子域名列表保存到 `E:\SecTools\ffsubfinder\<domain>.txt`。
+      - 中间文件（如 Subfinder、HTTPX、FFUF 输出）会在处理完成后自动删除。
+
+   ## 示例
+
+   ```bash
    python ffsubfinder.py -u domains.txt
    ```
 
-3. 脚本完成后，结果文件会生成在 `OUTPUT_DIR` 目录下，每个域名对应一个 `.txt` 文件，包含已去重的存活子域名。
+   **输出示例**：
 
-------
+   ```
+   [+] Processing example.com ...
+   [*] 开始解析 HTTPX 输出...
+   [+] sub1.example.com | 状态: 200 | 词数: 1000 | 长度: 5000
+   [+] sub2.example.com | 状态: 200 | 词数: 800 | 长度: 4500
+   [*] 常见响应特征 (将被过滤): {(404, 200, 1000)}
+   [+] 最终保留 2 个域名
+   [+] Done: example.com
+       └── Final : E:\SecTools\ffsubfinder\example.com.txt
+   ```
 
-### 参数说明
+   ## 输出文件
 
-- `-u, --urls`: 指定包含域名列表的文件路径（必选）。
+   - **`example.com.txt`**：包含去重后的子域名列表（被动 + 主动）。
 
-------
+   - 每行一个子域名，例如：
 
-### 自定义调整
+     ```
+     sub1.example.com
+     sub2.example.com
+     ```
 
-- **线程数、超时等可在脚本 `run_command` 调用中修改**。
-- **高频响应大小过滤阈值**：在 `extract_urls_from_ffuf_json` 函数中修改 `max_common_size_count` 值。
+   ## 注意事项
 
-------
+   1. **工具路径**：确保 `SUBFINDER_PATH`、`HTTPX_PATH` 和 `FFUF_PATH` 配置正确。
+   2. **字典质量**：子域名字典的质量直接影响 FFUF 的探测效果。
+   3. **伪重定向过滤**：当前脚本未完全实现伪重定向过滤（HTTPX 返回 200 但实际重定向）。可参考以下优化建议。
+   4. **性能**：HTTPX 和 FFUF 的线程数、速率限制等参数可根据需要调整。
+   5. **清理**：中间文件会在每次运行后自动删除，确保磁盘空间充足。
 
-### 示例
+   ## 优化建议
 
-```powershell
-# 扫描 domains.txt 中的所有域名
-python ffsubfinder.py -u C:\path\to\domains.txt
+   - 伪重定向过滤
 
-# 完成后查看结果
-type E:\SecTools\ffsubfinder\example.com.txt
-```
+     ：
 
-------
+     - 检查 HTTPX 输出中的 `input` 和 `url` 字段，若不同则表示重定向。
 
-### 许可证
+     - 添加正则规则过滤重定向到登录页、404 页等无用页面（例如 `/login`、`/error`）。
 
-MIT License © 2025
+     - 示例：
+
+       ```python
+       if input_url != final_url and re.search(r"/login|/error", final_url):
+           continue
+       ```
+
+   - **并行处理**：使用 `concurrent.futures` 并行处理多个域名，提升效率。
+
+   - **日志记录**：将 `print` 替换为 `logging` 模块，支持日志级别和文件输出。
+
+   - **动态配置**：通过命令行参数支持自定义线程数、速率限制等。
+
+   ## 贡献
+
+   欢迎提交问题或优化建议！请通过 GitHub Issues 或 Pull Requests 反馈。
+
+   ## 许可证
+
+   本项目采用 MIT 许可证。详情见 `LICENSE` 文件。
